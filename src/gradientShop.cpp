@@ -28,7 +28,7 @@ double GradientShop::gradient_y(int x, int y){
 double GradientShop::gradientMagnitude(int px, int py){
     return sqrt(pow(px,2) + pow(py, 2));
 }
-int GradientShop::gradientOrientation( int x, int y){
+double GradientShop::gradientOrientation( int x, int y){
     double dx = gradient_x( x, y), dy = gradient_y( x, y);
     if(dx == 0){
         if(dy > 0)  return 90;
@@ -42,7 +42,7 @@ int GradientShop::gradientOrientation( int x, int y){
 double GradientShop::window_normalize( int x, int y , int width){
     CV_Assert(width % 2 != 0 && width > 1);
     if( isInRange( x, y, (width -1 )/2 )) {
-        double avg = 0.0, sigma = 0.0, epsilon = 0.01, offset = width/2;
+        double avg = 0.0, sigma = 0.0, epsilon = 0.1, offset = width/2;
         Mat window = Mat::zeros(width, width, CV_64F);
         for (int i = - width/2; i < width/2 + 1 ; i++)
             for (int j = - width/2; j < width/2 + 1 ; j++){
@@ -140,19 +140,17 @@ void GradientShop::_computeGradient(){
     }
 }
 
-void GradientShop::_computeGradientMagnitude(){
+void GradientShop::_computeGradientMagnitude( Mat &dst, Mat &pdx, Mat &pdy){
     for(int y = 0 ; y < row_len ; y ++ ){
         for (int x = 0; x < col_len ; x ++){
-            u_mag.at<double>(y,x)= gradientMagnitude(u_x.at<double>(y,x), u_y.at<double>(y,x));
+            dst.at<double>(y,x)= gradientMagnitude(pdx.at<double>(y,x), pdy.at<double>(y,x));
         }
     }
 }
 void GradientShop::_computeOrient(){
     for(int y = 1 ; y < row_len - 1; y ++ ){
         for (int x = 1; x < col_len - 1; x ++){
-            int c =  gradientOrientation( x, y);
-
-            orient.at<double>(y,x) = double(c);
+            orient.at<double>(y,x) = gradientOrientation( x, y);
         }
     }
 
@@ -199,7 +197,7 @@ void GradientShop::initialize(){
     ITERATION = 60;
     CV_Assert(channel >= 0 && channel <= 2);
     nchannels = src.channels();
-    orient = Mat::zeros( row_len, col_len, CV_8U); 
+    orient = Mat::zeros( row_len, col_len, CV_64F); 
     normaled_mag = Mat::zeros( row_len, col_len, CV_64F); 
     len_edge = Mat::zeros( row_len, col_len, CV_64F);
     saliency_x = Mat::zeros( row_len, col_len, CV_64F);
@@ -208,6 +206,7 @@ void GradientShop::initialize(){
     u_y = Mat::zeros( row_len, col_len, CV_64F);
     u = Mat::zeros( row_len, col_len, CV_64F);
     u_mag = Mat::zeros( row_len, col_len, CV_64F);
+    saliency_mag = Mat::zeros( row_len, col_len, CV_64F);
 }
 void GradientShop::showImage(Mat src, string window_name){
     Mat dst;
@@ -224,8 +223,7 @@ void GradientShop::writeImage(Mat src, string window_name){
 
     Mat dst;
     src.convertTo(dst, CV_8U);
-    cout << dst << endl;
-    bool bSuccess = imwrite( outdir + "/"+ window_name + ".jpg", dst, compression_params); 
+    bool bSuccess = imwrite( outdir + "/"+ window_name + to_string(channel) + ".jpg", dst, compression_params); 
     if ( !bSuccess )
     {
         cout << "ERROR : Failed to save the image" << endl;
@@ -233,31 +231,31 @@ void GradientShop::writeImage(Mat src, string window_name){
     }
 }
 
+void GradientShop::writeCSV(Mat src, string filename){
+    cv::FileStorage fd(outdir +"/" + filename + to_string(channel )+  ".csv", cv::FileStorage::WRITE);
+
+    fd << filename << src;
+}
 void GradientShop::computeSaliency(){
     string window_name[] = {"pixel", "gradient_x","gradient_y","gradientMagnitude",  "normaled_mag",  "saliency"};
     _computePixel();
+    writeCSV(u, "pixel_ori");
     writeImage(u, window_name[0]);
     _computeGradient();
     writeImage(abs(u_x), window_name[1]);
     writeImage(abs(u_y), window_name[2]);
-    _computeGradientMagnitude();
+    _computeGradientMagnitude(u_mag, u_x, u_y);
     writeImage(u_mag, window_name[3]);
     _computeOrient();
     writeImage(orient, "orient");
     _computeNormalizedMagnitude();
-    cout << normaled_mag << endl;
-    double min, max;
-    minMaxLoc(normaled_mag, &min, &max);
-    cout << "min:"<< min << ", max:" << max <<endl;
-    writeImage(((normaled_mag-min)/(max-min)*255), window_name[4]);
+    double _min, _max;
+    minMaxLoc(normaled_mag, &_min, &_max);
+    cout << "min:"<< _min << ", max:" << _max <<endl;
+    writeImage(((normaled_mag-_min)/(_max-_min)*255), window_name[4]);
     _computeEdgeLength();
     _computeSaliency();
-    Mat dst = Mat::zeros(row_len, col_len, CV_64F);
-    for(int y = 1 ; y < row_len - 1; y ++ ){
-        for (int x = 1; x < col_len - 1; x ++){
-            dst.at<double>(y,x) = gradientMagnitude(saliency_x.at<double>(y,x), saliency_y.at<double>(y,x));
-        }
-    }
-    writeImage(dst, window_name[5]);
+    _computeGradientMagnitude(saliency_mag, saliency_x, saliency_y);
+    writeImage(saliency_mag, window_name[5]);
 }
 

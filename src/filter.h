@@ -16,6 +16,7 @@ private:
     int iMAX;
     int reAdjust;
     int nchannels ;
+    int sensitiveB = 2;
     vector<GradientShop> gs;
 public:
     Mat src, out;

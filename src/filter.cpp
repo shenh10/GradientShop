@@ -34,7 +34,8 @@ double Filter::getMatValue(Mat &_src, int _channel, int x, int y){
 
 void Filter::setMatValue(Mat &_src, int _channel, int x, int y, double val){
     if (_src.channels() == 1){
-        _src.at<uchar>(y, x) = val;
+        _src.at<double>(y, x) = val;
+        return;
     }
     Vec3b intensity = _src.at<Vec3b>(y, x);
     intensity.val[_channel] = val;
@@ -56,20 +57,29 @@ void Filter::computeFilter(){
         double c1 = 2, c2 = 2;
         Mat d = gs[n].u;
         Mat wd = c1* Mat::ones(row, col, CV_64F);
-        Mat wx =  Mat::ones(row, col, CV_64F);
-        Mat wy =  Mat::ones(row, col, CV_64F);
+        Mat wx , wy, tmp;
+        tmp = 1./(abs(gs[n].saliency_x)+1);
+        cv::pow(tmp, sensitiveB, wx);
+        tmp = 1./(abs(gs[n].saliency_x)+1);
+        cv::pow(tmp, sensitiveB, wy);
         Mat gx = gs[n].u_x + c2* gs[n].saliency_x;
         Mat gy = gs[n].u_y + c2* gs[n].saliency_y;
         vector<double> v_x = cgSolver(d, gx, gy, wd, wx, wy);
+        Mat pixel_out = Mat::zeros(row, col, CV_64F);
+        cout << "Pixel Out Channel"<< pixel_out.channels() << endl;
         for(int y = 0; y < row; y ++){
             for(int x = 0; x < col; x++){
                 int index = y*col + x;
+                cout << v_x[index] << ",";
                 setMatValue(out, n, x, y, v_x[index]); 
+                setMatValue(pixel_out, n, x,y, v_x[index]);
             }
         }
-        cout << out << endl;
-        gs[0].writeImage(out, "output");
+        pixel_out.convertTo(tmp, CV_8U);
+        gs[n].writeCSV(tmp, "pixel_out");
+        gs[n].writeImage(pixel_out, "pixel_out");
     }
+    gs[0].writeImage(out, "out");
 }
 
 vector<double> Filter::cgSolver(Mat & _d, Mat & _gx, Mat & _gy, Mat &_wd, Mat &_wx, Mat &_wy){
@@ -78,25 +88,62 @@ vector<double> Filter::cgSolver(Mat & _d, Mat & _gx, Mat & _gy, Mat &_wd, Mat &_
     vector<double> b, v_x;
     b.resize(vlen);
     v_x.resize(vlen);
+    const int neighIter = 4;
+    int dx[neighIter] = {0, -1,  0, 1};
+    int dy[neighIter] = {-1, 0,  1, 0};
     cout << "Counting A, b, initialize x..." << endl;
-    for(int y = 1; y < row-1; y++ ){
-        for(int x = 1; x < col-1; x ++){
+    for(int y = 0; y < row; y++ ){
+        for(int x = 0; x < col; x ++){
             int index = y*col + x;
-            A.insert( make_pair(index, index),  2* ( _wd.at<double>(y, x) + _wx.at<double>(y, x-1) + _wx.at<double>(y, x + 1) + _wy.at<double>(y-1, x) + _wy.at<double>( y+1, x) ));
-            b[index] = 4* ( _wd.at<double>(y,x) * _d.at<double>(y,x) + _wx.at<double>(y,x-1) * _gx.at<double>(y,x-1) + _wy.at<double>(y+1,x) * _gy.at<double>(y+1,x) - _wx.at<double>(y,x+1) * _gx.at<double>(y,x + 1) - _wy.at<double>(y-1,x) * _gy.at<double>(y-1,x));
-            A.insert(make_pair( (y-1)*col+x, (y+1)*col+x),  -4 * _wy.at<double>(y,x));
-            A.insert( make_pair((y+1)*col+x, (y-1)*col+x) , -4 * _wy.at<double>(y,x));
-            A.insert( make_pair( y*col+x+1, y*col+x-1) , -4 * _wx.at<double>(y,x));
-            A.insert( make_pair( y*col+x-1, y*col+x+1) , -4 * _wx.at<double>(y,x));
+            double a_sum = 0.0, b_sum = 0.0;
+            a_sum += _wd.at<double>(y,x);
+            b_sum +=  _wd.at<double>(y,x) * _d.at<double>(y,x); 
+            for(int i = 0; i < neighIter; i++){
+                int new_x = x + dx[i];
+                int new_y = y + dy[i];
+                if(! isInRange(new_x, new_y, 0) ) continue;
+                if(new_x != x){
+                    a_sum += _wx.at<double>(new_y, new_x);   
+                    if(new_x > x){
+                        b_sum += - _wx.at<double>(new_y, new_x)* _gx.at<double>(new_y, new_x);
+                    }else{
+                        b_sum +=  _wx.at<double>(new_y, new_x)* _gx.at<double>(new_y, new_x);
+                    }
+                }
+                if(new_y != y){
+                    a_sum += _wy.at<double>(new_y, new_x); 
+                    if(new_y > y){
+                        b_sum +=  _wy.at<double>(new_y, new_x)* _gy.at<double>(new_y, new_x);
+                    }else{
+                        b_sum += - _wy.at<double>(new_y, new_x)* _gy.at<double>(new_y, new_x);
+                    }
+
+                }
+            }
+            A.insert( make_pair(index, index),  a_sum);
+            b[index] = b_sum; 
+            for(int i = 0; i < neighIter/2; i++){
+                int new_x_l = x + dx[i];
+                int new_y_l = y + dy[i];
+                int new_x_r = x + dx[i+neighIter/2];
+                int new_y_r = y + dy[i+neighIter/2];
+                if(! isInRange(new_x_l, new_y_l, 0) || ! Range(new_x_r, new_y_r) ) continue;
+                if(new_x_l != x){
+                    A.insert(make_pair(y*col + new_x_l, y*col + new_x_r), - _wx.at<double>(y,x));
+                    A.insert(make_pair(y*col + new_x_r, y*col + new_x_l), - _wx.at<double>(y,x));
+                }
+                if(new_y_l != y){
+                    A.insert(make_pair(new_y_l*col + x, new_y_r*col + x), - _wy.at<double>(y,x));
+                    A.insert(make_pair(new_y_r*col + x, new_y_l*col + x), - _wy.at<double>(y,x));
+
+                }
+            }
             v_x[index] = _d.at<double>(y,x);
         }
     }
     cout << "Start conjugate gradient optimization..." << endl;
-    printVec(b);
-    printVec(v_x);
     double sigma =  conjugateGradient(A, b, v_x );
     cout << "Optimization done, residual norm: "<< sigma <<"..." << endl;
-    printVec(v_x);
     return v_x;
 }
 double Filter::conjugateGradient(SparseMatrix &A,vector<double> &b, vector<double> &v_x){

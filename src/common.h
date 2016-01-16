@@ -11,9 +11,9 @@
 
 using namespace std;
 template <typename T>
-void printVec(vector<T> vec){
+void printVec(vector<T> vec, int number){
     cout<<"[";
-    for (int i = 0; i< vec.size(); i++){
+    for (int i = 0; i< ( vec.size()< number? vec.size():number); i++){
         cout<< vec[i]<<" ";
 
     }
