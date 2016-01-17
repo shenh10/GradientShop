@@ -7,6 +7,7 @@
 #include <vector>
 #include <utility>
 #include <map>
+#include <stdlib.h>
 #define PI 3.14159265
 
 using namespace std;

@@ -4,6 +4,7 @@
 #ifndef __COMMON_H__
 # include "common.h"
 #endif
+#include "opencv.h"
 #include "sparsematrix.h"
 class MatrixOper{
 public:
@@ -17,5 +18,8 @@ public:
     bool vectorSubtract(vector<double> &x1, vector<double> &x2, vector<double> &res);
     bool vectorSelfSubtract(vector<double> &x1, vector<double> &x2);
     void vectorScalarProd(vector<double> &x1, vector<double> & res, double s);
+
+    void cosMat(Mat A, Mat& res);
+    void sinMat(Mat A, Mat& res);
 };
 #endif

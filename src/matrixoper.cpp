@@ -91,4 +91,20 @@ void MatrixOper::vectorScalarProd(vector<double> &x1, vector<double> & res, doub
     }
 }
 
+void MatrixOper::cosMat(Mat A, Mat& res){
+    res = A.clone();
+    for(int y = 0; y < A.rows; y ++){
+        for(int x = 0; x < A.cols; x++){
+            res.at<double>(y,x) = cos(A.at<double>(y,x));
+        }    
+    }
+}
+void MatrixOper::sinMat(Mat A, Mat& res){
+    res = A.clone();
+    for(int y = 0; y < A.rows; y ++){
+        for(int x = 0; x < A.cols; x++){
+            res.at<double>(y,x) = sin(A.at<double>(y,x));
+        }    
+    }
 
+}

@@ -51,36 +51,7 @@ double Filter::gradient_y(Mat &_src, int _channel, int x, int y){
     return dy;
 }   
 
-void Filter::computeFilter(){
-    for(int n = 0; n < nchannels; n ++){
-        gs[n].computeSaliency();  
-        double c1 = 2, c2 = 2;
-        Mat d = gs[n].u;
-        Mat wd = c1* Mat::ones(row, col, CV_64F);
-        Mat wx , wy, tmp;
-        tmp = 1./(abs(gs[n].saliency_x)+1);
-        cv::pow(tmp, sensitiveB, wx);
-        tmp = 1./(abs(gs[n].saliency_x)+1);
-        cv::pow(tmp, sensitiveB, wy);
-        Mat gx = gs[n].u_x + c2* gs[n].saliency_x;
-        Mat gy = gs[n].u_y + c2* gs[n].saliency_y;
-        vector<double> v_x = cgSolver(d, gx, gy, wd, wx, wy);
-        Mat pixel_out = Mat::zeros(row, col, CV_64F);
-        cout << "Pixel Out Channel"<< pixel_out.channels() << endl;
-        for(int y = 0; y < row; y ++){
-            for(int x = 0; x < col; x++){
-                int index = y*col + x;
-                cout << v_x[index] << ",";
-                setMatValue(out, n, x, y, v_x[index]); 
-                setMatValue(pixel_out, n, x,y, v_x[index]);
-            }
-        }
-        pixel_out.convertTo(tmp, CV_8U);
-        gs[n].writeCSV(tmp, "pixel_out");
-        gs[n].writeImage(pixel_out, "pixel_out");
-    }
-    gs[0].writeImage(out, "out");
-}
+
 
 vector<double> Filter::cgSolver(Mat & _d, Mat & _gx, Mat & _gy, Mat &_wd, Mat &_wx, Mat &_wy){
     int row = src.rows, col = src.cols, vlen = row*col;
